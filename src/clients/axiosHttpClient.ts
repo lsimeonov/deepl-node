@@ -2,18 +2,22 @@
 // Use of this source code is governed by an MIT
 // license that can be found in the LICENSE file.
 
-import { ConnectionError } from './errors';
-import { logDebug, logInfo, timeout } from './utils';
+import { ConnectionError } from '../errors';
+import { logDebug, logInfo } from '../utils';
 
 import axios, { AxiosError, AxiosRequestConfig } from 'axios';
-import { URLSearchParams } from 'url';
 import FormData from 'form-data';
-import { IncomingMessage } from 'http';
-import { ProxyConfig } from './types';
-import * as https from 'https';
 import * as http from 'http';
-
-type HttpMethod = 'GET' | 'DELETE' | 'POST';
+import * as https from 'https';
+import { BackoffTimer } from './backoff';
+import {
+    HttpClientParams,
+    HttpMethod,
+    IBackoffTimer,
+    IHttpClient,
+    ProxyConfig,
+    SendRequestOptions,
+} from './types';
 
 const axiosInstance = axios.create({
     httpAgent: new http.Agent({ keepAlive: true }),
@@ -21,91 +25,21 @@ const axiosInstance = axios.create({
 });
 
 /**
- * Options for sending HTTP requests.
- * @private
- */
-interface SendRequestOptions {
-    /**
-     * Fields to include in message body (or params). Values must be either strings, or arrays of
-     * strings (for repeated parameters).
-     */
-    data?: URLSearchParams;
-    /** Extra HTTP headers to include in request, in addition to headers defined in constructor. */
-    headers?: Record<string, string>;
-    /** Buffer containing file data to include. */
-    fileBuffer?: Buffer;
-    /** Filename of file to include. */
-    filename?: string;
-}
-
-/**
- * Internal class implementing exponential-backoff timer.
- * @private
- */
-class BackoffTimer {
-    private backoffInitial = 1.0;
-    private backoffMax = 120.0;
-    private backoffJitter = 0.23;
-    private backoffMultiplier = 1.6;
-    private numRetries: number;
-    private backoff: number;
-    private deadline: number;
-
-    constructor() {
-        this.numRetries = 0;
-        this.backoff = this.backoffInitial * 1000.0;
-        this.deadline = Date.now() + this.backoff;
-    }
-
-    getNumRetries(): number {
-        return this.numRetries;
-    }
-
-    getTimeout(): number {
-        return this.getTimeUntilDeadline();
-    }
-
-    getTimeUntilDeadline(): number {
-        return Math.max(this.deadline - Date.now(), 0.0);
-    }
-
-    async sleepUntilDeadline() {
-        await timeout(this.getTimeUntilDeadline());
-
-        // Apply multiplier to current backoff time
-        this.backoff = Math.min(this.backoff * this.backoffMultiplier, this.backoffMax * 1000.0);
-
-        // Get deadline by applying jitter as a proportion of backoff:
-        // if jitter is 0.1, then multiply backoff by random value in [0.9, 1.1]
-        this.deadline =
-            Date.now() + this.backoff * (1 + this.backoffJitter * (2 * Math.random() - 1));
-        this.numRetries++;
-    }
-}
-
-/**
  * Internal class implementing HTTP requests.
- * @private
  */
-export class HttpClient {
+export default class AxiosHttpClient implements IHttpClient {
     private readonly serverUrl: string;
     private readonly headers: Record<string, string>;
     private readonly minTimeout: number;
     private readonly maxRetries: number;
     private readonly proxy?: ProxyConfig;
 
-    constructor(
-        serverUrl: string,
-        headers: Record<string, string>,
-        maxRetries: number,
-        minTimeout: number,
-        proxy?: ProxyConfig,
-    ) {
-        this.serverUrl = serverUrl;
-        this.headers = headers;
-        this.maxRetries = maxRetries;
-        this.minTimeout = minTimeout;
-        this.proxy = proxy;
+    constructor(params: HttpClientParams) {
+        this.serverUrl = params.serverUrl;
+        this.headers = params.headers;
+        this.maxRetries = params.maxRetries;
+        this.minTimeout = params.minTimeout;
+        this.proxy = params.proxy;
     }
 
     prepareRequest(
@@ -157,19 +91,21 @@ export class HttpClient {
      * @param url Path to endpoint, excluding base server URL.
      * @param options Additional options controlling request.
      * @param responseAsStream Set to true if the return type is IncomingMessage.
+     * @param backoff Backoff timer to use for retries.
      * @return Fulfills with status code and response (as text or stream).
      */
-    async sendRequestWithBackoff<TContent extends string | IncomingMessage>(
+    async sendRequestWithBackoff<TContent>(
         method: HttpMethod,
         url: string,
         options?: SendRequestOptions,
         responseAsStream = false,
+        backoff?: IBackoffTimer,
     ): Promise<{ statusCode: number; content: TContent }> {
         options = options === undefined ? {} : options;
         logInfo(`Request to DeepL API ${method} ${url}`);
         logDebug(`Request details: ${options.data}`);
-        const backoff = new BackoffTimer();
         let response, error;
+        backoff = backoff || new BackoffTimer();
         while (backoff.getNumRetries() <= this.maxRetries) {
             const timeoutMs = Math.max(this.minTimeout, backoff.getTimeout());
             const axiosRequestConfig = this.prepareRequest(
@@ -180,7 +116,7 @@ export class HttpClient {
                 options,
             );
             try {
-                response = await HttpClient.sendAxiosRequest<TContent>(axiosRequestConfig);
+                response = await AxiosHttpClient.sendAxiosRequest<TContent>(axiosRequestConfig);
                 error = undefined;
             } catch (e) {
                 response = undefined;
@@ -188,7 +124,7 @@ export class HttpClient {
             }
 
             if (
-                !HttpClient.shouldRetry(response?.statusCode, error) ||
+                !AxiosHttpClient.shouldRetry(response?.statusCode, error) ||
                 backoff.getNumRetries() + 1 >= this.maxRetries
             ) {
                 break;
@@ -222,7 +158,7 @@ export class HttpClient {
      * @param axiosRequestConfig
      * @private
      */
-    private static async sendAxiosRequest<TContent extends string | IncomingMessage>(
+    private static async sendAxiosRequest<TContent>(
         axiosRequestConfig: AxiosRequestConfig,
     ): Promise<{ statusCode: number; content: TContent }> {
         try {

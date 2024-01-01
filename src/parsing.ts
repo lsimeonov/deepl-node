@@ -4,7 +4,6 @@
 
 import { DeepLError } from './errors';
 import {
-    DocumentHandle,
     DocumentStatus,
     DocumentStatusCode,
     GlossaryLanguagePair,
@@ -15,6 +14,7 @@ import {
     TargetGlossaryLanguageCode,
     UsageDetail,
     Usage,
+    DocumentHandle,
 } from './index';
 import { GlossaryInfo, SourceLanguageCode } from './types';
 

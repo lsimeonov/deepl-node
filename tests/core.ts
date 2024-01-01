@@ -8,6 +8,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { v4 as randomUUID } from 'uuid';
+import { ProxyConfig } from '../src/clients/types';
 
 // Note: this constant cannot be exported immediately, because exports are locally undefined
 const internalExampleText: Record<string, string> = {
@@ -89,7 +90,7 @@ export interface TestTranslatorOptions {
     randomAuthKey?: boolean;
     maxRetries?: number;
     minTimeout?: number;
-    proxy?: deepl.ProxyConfig;
+    proxy?: ProxyConfig;
     sendPlatformInfo?: boolean;
     appInfo?: deepl.AppInfo;
 
@@ -172,6 +173,7 @@ export function makeTranslator(options?: TestTranslatorOptions): deepl.Translato
         proxy: options?.proxy,
         sendPlatformInfo: options?.sendPlatformInfo,
         appInfo: options?.appInfo,
+        httpClient: (process.env.DEEPL_HTTP_CLIENT as 'axios' | 'fetch') || 'axios',
     });
 }
 
@@ -187,7 +189,7 @@ const proxyUrl = proxyUrlString ? new URL(proxyUrlString) : undefined;
 const proxyConfigHost = proxyUrl ? proxyUrl.hostname : '';
 const proxyConfigPort = parseInt(process.env.DEEPL_MOCK_PROXY_SERVER_PORT || '');
 
-export const proxyConfig: deepl.ProxyConfig = { host: proxyConfigHost, port: proxyConfigPort };
+export const proxyConfig: ProxyConfig = { host: proxyConfigHost, port: proxyConfigPort };
 
 // Wrap setTimeout() with Promise
 export const timeout = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

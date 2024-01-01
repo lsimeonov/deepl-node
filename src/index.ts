@@ -2,7 +2,8 @@
 // Use of this source code is governed by an MIT
 // license that can be found in the LICENSE file.
 
-import { HttpClient } from './client';
+import AxiosHttpClient from './clients/axiosHttpClient';
+import FetchHttpClient from './clients/fetchHttpClient';
 import {
     AuthorizationError,
     DeepLError,
@@ -25,6 +26,7 @@ import {
 } from './parsing';
 import {
     AppInfo,
+    DocumentHandle,
     DocumentTranslateOptions,
     Formality,
     GlossaryId,
@@ -48,6 +50,7 @@ import path from 'path';
 import * as os from 'os';
 import { URLSearchParams } from 'url';
 import * as util from 'util';
+import { HttpClientParams, IHttpClient } from './clients/types';
 
 export * from './errors';
 export * from './glossaryEntries';
@@ -121,21 +124,6 @@ export interface GlossaryLanguagePair {
      * The code of the target language.
      */
     readonly targetLang: TargetGlossaryLanguageCode;
-}
-
-/**
- * Handle to an in-progress document translation.
- */
-export interface DocumentHandle {
-    /**
-     * ID of associated document request.
-     */
-    readonly documentId: string;
-
-    /**
-     * Key of associated document request.
-     */
-    readonly documentKey: string;
 }
 
 export type DocumentStatusCode = 'queued' | 'translating' | 'error' | 'done';
@@ -483,13 +471,34 @@ export class Translator {
 
         const maxRetries = options?.maxRetries !== undefined ? options.maxRetries : 5;
         const minTimeout = options?.minTimeout !== undefined ? options.minTimeout : 5000;
-        this.httpClient = new HttpClient(
+
+        const httpClientParams: HttpClientParams = {
             serverUrl,
             headers,
             maxRetries,
             minTimeout,
-            options?.proxy,
-        );
+            proxy: options?.proxy,
+        };
+
+        // Default Axios client
+
+        if (options?.httpClient) {
+            if (typeof options.httpClient === 'string') {
+                // String cases
+                this.httpClient =
+                    options.httpClient === 'fetch'
+                        ? new FetchHttpClient(httpClientParams)
+                        : new AxiosHttpClient(httpClientParams);
+            } else {
+                // Function case
+                this.httpClient = options.httpClient(httpClientParams);
+            }
+        } else {
+            // Default instance
+            const httpClientInstance = new AxiosHttpClient(httpClientParams);
+            httpClientInstance.sendRequestWithBackoff('GET', '/v2/languages');
+            this.httpClient = httpClientInstance;
+        }
     }
 
     /**
@@ -1009,5 +1018,12 @@ export class Translator {
      * HttpClient implements all HTTP requests and retries.
      * @private
      */
-    private readonly httpClient: HttpClient;
+    private readonly httpClient: IHttpClient;
 }
+
+export { IHttpClient } from './clients/types';
+export { SendRequestOptions } from './clients/types';
+export { HttpMethod } from './clients/types';
+export { HttpClient } from './clients/types';
+export { HttpClientParams } from './clients/types';
+export { ProxyConfig } from './clients/types';

@@ -3,6 +3,7 @@
 // license that can be found in the LICENSE file.
 
 import * as deepl from 'deepl-node';
+import { HttpClientParams } from 'deepl-node';
 
 import fs from 'fs';
 
@@ -10,12 +11,13 @@ import nock from 'nock';
 
 import {
     exampleText,
-    tempFiles,
-    withMockServer,
-    withMockProxyServer,
     makeTranslator,
     proxyConfig,
+    tempFiles,
+    withMockProxyServer,
+    withMockServer,
 } from './core';
+import AxiosHttpClient from '../src/clients/axiosHttpClient';
 
 const serverUrl = process.env.DEEPL_SERVER_URL;
 const urlToMockRegexp =
@@ -52,6 +54,23 @@ describe('general', () => {
     it('throws AuthorizationError with an invalid auth key', async () => {
         const translator = makeTranslator({ authKey: 'invalid' });
         await expect(translator.getUsage()).rejects.toThrowError(deepl.AuthorizationError);
+    });
+
+    it('custom http client', async () => {
+        if (process.env.DEEPL_AUTH_KEY === undefined) {
+            throw Error(
+                'DEEPL_AUTH_KEY environment variable must be defined unless using mock-server',
+            );
+        }
+        const axiosDefaultClient = function (params: HttpClientParams) {
+            return new AxiosHttpClient(params);
+        };
+        const translator = new deepl.Translator(process.env.DEEPL_AUTH_KEY, {
+            serverUrl,
+            httpClient: axiosDefaultClient,
+        });
+        const usage = await translator.getUsage();
+        expect(usage.toString()).toContain('Usage this billing period');
     });
 
     describe('user-agent tests', () => {
