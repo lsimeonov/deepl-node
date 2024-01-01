@@ -416,6 +416,12 @@ The available options are:
 -   `proxy`: define the hostname, and port of the proxy server, and optionally
     the protocol, and authorization (as an auth object with username and
     password fields).
+-  `httpClient`:`axios|fetch|callback` the HTTP client to use for requests. By default, the
+    - `axios` is using the axios implementation.
+    - `fetch`  is using the now native nodejs fetch API.
+    - `callback` provide a custom callback function that returns a new client. 
+    You must implement the `IHttpClient` interface. The callback receives the `HttpClientParams` so that you can 
+    configure the client as needed.
 
 #### Logging
 

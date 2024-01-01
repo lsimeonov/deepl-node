@@ -2,19 +2,7 @@
 // Use of this source code is governed by an MIT
 // license that can be found in the LICENSE file.
 
-/**
- * Optional proxy configuration, may be specified as proxy in TranslatorOptions.
- * @see TranslatorOptions.proxy
- */
-export interface ProxyConfig {
-    host: string;
-    port: number;
-    auth?: {
-        username: string;
-        password: string;
-    };
-    protocol?: string;
-}
+import { HttpClient, ProxyConfig } from './clients/types';
 
 /**
  * Optional identifier for the app that is using this library, may be specified
@@ -71,6 +59,11 @@ export interface TranslatorOptions {
      * Identifies the application using this client library, will be sent in the `User-Agent` header
      */
     appInfo?: AppInfo;
+
+    /**
+     * Http client implementation to be used (axios or fetch) or provide your own implementation.
+     */
+    httpClient?: HttpClient;
 }
 
 export type Formality = 'less' | 'more' | 'default' | 'prefer_less' | 'prefer_more';
@@ -245,3 +238,18 @@ export type SourceGlossaryLanguageCode =
  * API accept case-insensitive language codes.
  */
 export type TargetGlossaryLanguageCode = SourceGlossaryLanguageCode;
+
+/**
+ * Handle to an in-progress document translation.
+ */
+export interface DocumentHandle {
+    /**
+     * ID of associated document request.
+     */
+    readonly documentId: string;
+
+    /**
+     * Key of associated document request.
+     */
+    readonly documentKey: string;
+}
