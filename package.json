@@ -50,7 +50,8 @@
         "dist",
         "LICENSE",
         "README.md",
-        "SECURITY.md"
+        "SECURITY.md",
+        "tsconfig.json"
     ],
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
