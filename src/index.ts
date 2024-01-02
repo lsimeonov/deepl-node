@@ -42,13 +42,13 @@ import {
 import { isString, logInfo, streamToBuffer, streamToString, timeout, toBoolString } from './utils';
 
 import * as fs from 'fs';
-import { IncomingMessage, STATUS_CODES } from 'http';
 import path from 'path';
 import * as os from 'os';
 import { URLSearchParams } from 'url';
 import * as util from 'util';
 import { HttpClientParams, IHttpClient } from './clients/types';
 import { createHttpClient } from './clients';
+import { Readable } from 'stream';
 
 export * from './errors';
 export * from './glossaryEntries';
@@ -375,13 +375,13 @@ function validateAndAppendTextOptions(data: URLSearchParams, options?: Translate
  */
 async function checkStatusCode(
     statusCode: number,
-    content: string | IncomingMessage,
+    content: string | Readable,
     usingGlossary = false,
     inDocumentDownload = false,
 ): Promise<void> {
     if (200 <= statusCode && statusCode < 400) return;
 
-    if (content instanceof IncomingMessage) {
+    if (content instanceof Readable) {
         try {
             content = await streamToString(content);
         } catch (e) {
@@ -426,9 +426,9 @@ async function checkStatusCode(
                 throw new DeepLError(`Service unavailable${message}`);
             }
         default: {
-            const statusName = STATUS_CODES[statusCode] || 'Unknown';
+            // const statusName = STATUS_CODES[statusCode] || 'Unknown';
             throw new DeepLError(
-                `Unexpected status code: ${statusCode} ${statusName}${message}, content: ${content}`,
+                `Unexpected status code: ${statusCode} ${message}, content: ${content}`,
             );
         }
     }
@@ -913,7 +913,7 @@ export class Translator {
     ): Promise<void> {
         const data = new URLSearchParams({ document_key: handle.documentKey });
         const { statusCode, content } = await this.httpClient.then((c) =>
-            c.sendRequestWithBackoff<IncomingMessage>(
+            c.sendRequestWithBackoff<Readable>(
                 'POST',
                 `/v2/document/${handle.documentId}/result`,
                 { data },
