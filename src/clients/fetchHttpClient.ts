@@ -149,17 +149,17 @@ export default class FetchHttpClient implements IHttpClient {
                 const stream = Readable.from(response.body);
                 return { statusCode: response.status, content: stream as TContent };
             }
-            let data = (await response.text()) as TContent;
+            const data = (await response.text()) as TContent;
             return { statusCode: response.status, content: data };
-        } catch (fetchError: any) {
-            const message: string = fetchError.message || '';
+        } catch (fetchError: unknown) {
+            const message: string = (fetchError as Error).message || '';
 
             const error = new ConnectionError(`Connection failure: ${message}`);
-            error.error = fetchError;
-            if (fetchError.name === 'AbortError') {
+            error.error = fetchError as Error;
+            if ((fetchError as Error).name === 'AbortError') {
                 error.shouldRetry = true;
             } else {
-                logDebug('Unrecognized fetch error', fetchError);
+                logDebug('Unrecognized fetch error', (fetchError as object) || undefined);
                 error.shouldRetry = false;
             }
             throw error;

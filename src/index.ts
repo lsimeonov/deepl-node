@@ -1,9 +1,6 @@
 // Copyright 2022 DeepL SE (https://www.deepl.com)
 // Use of this source code is governed by an MIT
 // license that can be found in the LICENSE file.
-
-import AxiosHttpClient from './clients/axiosHttpClient';
-import FetchHttpClient from './clients/fetchHttpClient';
 import {
     AuthorizationError,
     DeepLError,
@@ -51,6 +48,7 @@ import * as os from 'os';
 import { URLSearchParams } from 'url';
 import * as util from 'util';
 import { HttpClientParams, IHttpClient } from './clients/types';
+import { createHttpClient } from './clients';
 
 export * from './errors';
 export * from './glossaryEntries';
@@ -480,25 +478,8 @@ export class Translator {
             proxy: options?.proxy,
         };
 
-        // Default Axios client
-
-        if (options?.httpClient) {
-            if (typeof options.httpClient === 'string') {
-                // String cases
-                this.httpClient =
-                    options.httpClient === 'fetch'
-                        ? new FetchHttpClient(httpClientParams)
-                        : new AxiosHttpClient(httpClientParams);
-            } else {
-                // Function case
-                this.httpClient = options.httpClient(httpClientParams);
-            }
-        } else {
-            // Default instance
-            const httpClientInstance = new AxiosHttpClient(httpClientParams);
-            httpClientInstance.sendRequestWithBackoff('GET', '/v2/languages');
-            this.httpClient = httpClientInstance;
-        }
+        // Create http client instance
+        this.httpClient = createHttpClient(options?.httpClient || 'axios', httpClientParams);
     }
 
     /**
@@ -506,9 +487,8 @@ export class Translator {
      * @return Fulfills with Usage object on success.
      */
     public async getUsage(): Promise<Usage> {
-        const { statusCode, content } = await this.httpClient.sendRequestWithBackoff<string>(
-            'GET',
-            '/v2/usage',
+        const { statusCode, content } = await this.httpClient.then((c) =>
+            c.sendRequestWithBackoff<string>('GET', '/v2/usage'),
         );
         await checkStatusCode(statusCode, content);
         return parseUsage(content);
@@ -519,9 +499,8 @@ export class Translator {
      * @return Fulfills with array of Language objects containing available source languages.
      */
     async getSourceLanguages(): Promise<readonly Language[]> {
-        const { statusCode, content } = await this.httpClient.sendRequestWithBackoff<string>(
-            'GET',
-            '/v2/languages',
+        const { statusCode, content } = await this.httpClient.then((c) =>
+            c.sendRequestWithBackoff<string>('GET', '/v2/languages'),
         );
         await checkStatusCode(statusCode, content);
         return parseLanguageArray(content);
@@ -533,12 +512,10 @@ export class Translator {
      */
     async getTargetLanguages(): Promise<readonly Language[]> {
         const data = new URLSearchParams({ type: 'target' });
-        const { statusCode, content } = await this.httpClient.sendRequestWithBackoff<string>(
-            'GET',
-            '/v2/languages',
-            {
+        const { statusCode, content } = await this.httpClient.then((c) =>
+            c.sendRequestWithBackoff<string>('GET', '/v2/languages', {
                 data,
-            },
+            }),
         );
         await checkStatusCode(statusCode, content);
         return parseLanguageArray(content);
@@ -549,9 +526,8 @@ export class Translator {
      * @return Fulfills with an array of GlossaryLanguagePair objects containing languages supported for glossaries.
      */
     async getGlossaryLanguagePairs(): Promise<readonly GlossaryLanguagePair[]> {
-        const { statusCode, content } = await this.httpClient.sendRequestWithBackoff<string>(
-            'GET',
-            '/v2/glossary-language-pairs',
+        const { statusCode, content } = await this.httpClient.then((c) =>
+            c.sendRequestWithBackoff<string>('GET', '/v2/glossary-language-pairs'),
         );
         await checkStatusCode(statusCode, content);
         return parseGlossaryLanguagePairArray(content);
@@ -580,10 +556,8 @@ export class Translator {
         const singular = appendTextsAndReturnIsSingular(data, texts);
         validateAndAppendTextOptions(data, options);
 
-        const { statusCode, content } = await this.httpClient.sendRequestWithBackoff<string>(
-            'POST',
-            '/v2/translate',
-            { data },
+        const { statusCode, content } = await this.httpClient.then((c) =>
+            c.sendRequestWithBackoff<string>('POST', '/v2/translate', { data }),
         );
         await checkStatusCode(statusCode, content);
         const textResults = parseTextResultArray(content);
@@ -728,10 +702,8 @@ export class Translator {
      */
     async getDocumentStatus(handle: DocumentHandle): Promise<DocumentStatus> {
         const data = new URLSearchParams({ document_key: handle.documentKey });
-        const { statusCode, content } = await this.httpClient.sendRequestWithBackoff<string>(
-            'POST',
-            `/v2/document/${handle.documentId}`,
-            { data },
+        const { statusCode, content } = await this.httpClient.then((c) =>
+            c.sendRequestWithBackoff<string>('POST', `/v2/document/${handle.documentId}`, { data }),
         );
         await checkStatusCode(statusCode, content, false, true);
         return parseDocumentStatus(content);
@@ -855,9 +827,8 @@ export class Translator {
      * @return Fulfills with a GlossaryInfo containing details about the glossary.
      */
     async getGlossary(glossaryId: GlossaryId): Promise<GlossaryInfo> {
-        const { statusCode, content } = await this.httpClient.sendRequestWithBackoff<string>(
-            'GET',
-            `/v2/glossaries/${glossaryId}`,
+        const { statusCode, content } = await this.httpClient.then((c) =>
+            c.sendRequestWithBackoff<string>('GET', `/v2/glossaries/${glossaryId}`),
         );
         await checkStatusCode(statusCode, content, true);
         return parseGlossaryInfo(content);
@@ -868,9 +839,8 @@ export class Translator {
      * @return Fulfills with an array of GlossaryInfos containing details about all existing glossaries.
      */
     async listGlossaries(): Promise<GlossaryInfo[]> {
-        const { statusCode, content } = await this.httpClient.sendRequestWithBackoff<string>(
-            'GET',
-            '/v2/glossaries',
+        const { statusCode, content } = await this.httpClient.then((c) =>
+            c.sendRequestWithBackoff<string>('GET', '/v2/glossaries'),
         );
         await checkStatusCode(statusCode, content, true);
         return parseGlossaryInfoList(content);
@@ -884,9 +854,8 @@ export class Translator {
     async getGlossaryEntries(glossary: GlossaryId | GlossaryInfo): Promise<GlossaryEntries> {
         glossary = isString(glossary) ? glossary : glossary.glossaryId;
 
-        const { statusCode, content } = await this.httpClient.sendRequestWithBackoff<string>(
-            'GET',
-            `/v2/glossaries/${glossary}/entries`,
+        const { statusCode, content } = await this.httpClient.then((c) =>
+            c.sendRequestWithBackoff<string>('GET', `/v2/glossaries/${glossary}/entries`),
         );
         await checkStatusCode(statusCode, content, true);
         return new GlossaryEntries({ tsv: content });
@@ -899,9 +868,8 @@ export class Translator {
      */
     async deleteGlossary(glossary: GlossaryId | GlossaryInfo): Promise<void> {
         glossary = isString(glossary) ? glossary : glossary.glossaryId;
-        const { statusCode, content } = await this.httpClient.sendRequestWithBackoff<string>(
-            'DELETE',
-            `/v2/glossaries/${glossary}`,
+        const { statusCode, content } = await this.httpClient.then((c) =>
+            c.sendRequestWithBackoff<string>('DELETE', `/v2/glossaries/${glossary}`),
         );
         await checkStatusCode(statusCode, content, true);
     }
@@ -923,14 +891,13 @@ export class Translator {
             options?.formality,
             options?.glossary,
         );
-        const { statusCode, content } = await this.httpClient.sendRequestWithBackoff<string>(
-            'POST',
-            '/v2/document',
-            {
+
+        const { statusCode, content } = await this.httpClient.then((c) =>
+            c.sendRequestWithBackoff<string>('POST', '/v2/document', {
                 data,
                 fileBuffer,
                 filename,
-            },
+            }),
         );
         await checkStatusCode(statusCode, content);
         return parseDocumentHandle(content);
@@ -945,13 +912,14 @@ export class Translator {
         outputStream: fs.WriteStream,
     ): Promise<void> {
         const data = new URLSearchParams({ document_key: handle.documentKey });
-        const { statusCode, content } =
-            await this.httpClient.sendRequestWithBackoff<IncomingMessage>(
+        const { statusCode, content } = await this.httpClient.then((c) =>
+            c.sendRequestWithBackoff<IncomingMessage>(
                 'POST',
                 `/v2/document/${handle.documentId}/result`,
                 { data },
                 true,
-            );
+            ),
+        );
         await checkStatusCode(statusCode, content, false, true);
 
         content.pipe(outputStream);
@@ -988,10 +956,8 @@ export class Translator {
             entries: entries,
         });
 
-        const { statusCode, content } = await this.httpClient.sendRequestWithBackoff<string>(
-            'POST',
-            '/v2/glossaries',
-            { data },
+        const { statusCode, content } = await this.httpClient.then((c) =>
+            c.sendRequestWithBackoff<string>('POST', '/v2/glossaries', { data }),
         );
         await checkStatusCode(statusCode, content, true);
         return parseGlossaryInfo(content);
@@ -1018,7 +984,7 @@ export class Translator {
      * HttpClient implements all HTTP requests and retries.
      * @private
      */
-    private readonly httpClient: IHttpClient;
+    private readonly httpClient: Promise<IHttpClient>;
 }
 
 export { IHttpClient } from './clients/types';
